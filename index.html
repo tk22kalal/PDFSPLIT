@@ -12,6 +12,7 @@
     }
     .pdf-container {
       display: flex;
+      flex-wrap: wrap;
       justify-content: center;
       margin-top: 20px;
     }
@@ -27,7 +28,7 @@
     }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
-  <script src="https://mozilla.github.io/pdf.js/build/pdf.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.15.349/pdf.min.js"></script>
 </head>
 <body>
   <h1>PDF Splitter</h1>
@@ -52,53 +53,90 @@
     pdfUpload.addEventListener("change", async (event) => {
       const file = event.target.files[0];
       if (file) {
-        uploadedPdfBytes = await file.arrayBuffer();
-        renderPdf(uploadedPdfBytes);
+        try {
+          console.log("Uploading PDF...");
+          uploadedPdfBytes = await file.arrayBuffer();
+          console.log("PDF uploaded successfully.");
+          renderPdf(uploadedPdfBytes);
+        } catch (error) {
+          console.error("Error uploading PDF:", error);
+        }
+      } else {
+        console.warn("No file selected.");
       }
     });
 
     splitButton.addEventListener("click", async () => {
       if (!uploadedPdfBytes) {
         alert("Please upload a PDF first.");
+        console.warn("Split button clicked without PDF upload.");
         return;
       }
       const start = parseInt(startPage.value, 10);
       const end = parseInt(endPage.value, 10);
+
       if (isNaN(start) || isNaN(end) || start > end) {
-        alert("Please provide valid page range.");
+        alert("Please provide a valid page range.");
+        console.error("Invalid page range:", { start, end });
         return;
       }
-      const splitPdfBytes = await splitPdf(uploadedPdfBytes, start, end);
-      renderPdf(splitPdfBytes);
+
+      try {
+        console.log(`Splitting PDF from page ${start} to ${end}...`);
+        const splitPdfBytes = await splitPdf(uploadedPdfBytes, start, end);
+        console.log("PDF split successfully. Rendering split pages...");
+        renderPdf(splitPdfBytes);
+      } catch (error) {
+        console.error("Error splitting PDF:", error);
+      }
     });
 
     async function renderPdf(pdfBytes) {
-      const loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
-      const pdf = await loadingTask.promise;
-      pdfPreview.innerHTML = ""; // Clear previous previews
+      try {
+        console.log("Rendering PDF...");
+        const loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
+        const pdf = await loadingTask.promise;
+        pdfPreview.innerHTML = ""; // Clear previous previews
 
-      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-        const page = await pdf.getPage(pageNum);
-        const canvas = document.createElement("canvas");
-        const context = canvas.getContext("2d");
-        const viewport = page.getViewport({ scale: 1 });
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
+        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+          const page = await pdf.getPage(pageNum);
+          const canvas = document.createElement("canvas");
+          const context = canvas.getContext("2d");
+          const viewport = page.getViewport({ scale: 1.5 });
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
 
-        await page.render({ canvasContext: context, viewport }).promise;
-        pdfPreview.appendChild(canvas);
+          await page.render({ canvasContext: context, viewport }).promise;
+          pdfPreview.appendChild(canvas);
+        }
+        console.log("PDF rendered successfully.");
+      } catch (error) {
+        console.error("Error rendering PDF:", error);
       }
     }
 
     async function splitPdf(pdfBytes, startPage, endPage) {
-      const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
-      const newPdf = await PDFLib.PDFDocument.create();
+      try {
+        console.log("Splitting PDF...");
+        const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
+        const newPdf = await PDFLib.PDFDocument.create();
 
-      for (let i = startPage - 1; i < endPage; i++) {
-        const [copiedPage] = await newPdf.copyPages(pdfDoc, [i]);
-        newPdf.addPage(copiedPage);
+        for (let i = startPage - 1; i < endPage; i++) {
+          if (i < pdfDoc.getPageCount()) {
+            const [copiedPage] = await newPdf.copyPages(pdfDoc, [i]);
+            newPdf.addPage(copiedPage);
+          } else {
+            console.warn(`Page ${i + 1} does not exist in the document.`);
+          }
+        }
+
+        const splitBytes = await newPdf.save();
+        console.log("Split operation completed. Returning new PDF bytes.");
+        return splitBytes;
+      } catch (error) {
+        console.error("Error during PDF splitting:", error);
+        throw error;
       }
-      return await newPdf.save();
     }
   </script>
 </body>
